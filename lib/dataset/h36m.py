@@ -20,7 +20,8 @@ class H36M_Integral(JointsIntegralDataset):
     def __init__(self, cfg, root, image_set, is_train):
         super().__init__(cfg, root, image_set, is_train)
 
-        self.parent_ids = np.array([0, 0, 1, 2, 0, 4, 5, 0, 8, 8, 9, 8, 11, 12, 8, 14, 15], dtype=np.int)
+        # self.parent_ids = np.array([0, 0, 1, 2, 0, 4, 5, 0, 8, 8, 9, 8, 11, 12, 8, 14, 15], dtype=np.int)
+        self.parent_ids = np.array([0, 0, 1, 2, 0, 4, 5, 0, 8, 8, 9, 8, 11, 12, 8, 14, 15], dtype=int)
 
         self.cam_config = [[1, 2], [0, 3], [0, 3], [1, 2]] # Camera neighborhoods
 
