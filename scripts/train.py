@@ -189,3 +189,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+# conda activate meta
+# python scripts/train.py --cfg experiments/wormnd/train-ss.yaml
