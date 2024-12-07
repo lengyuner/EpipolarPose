@@ -11,14 +11,16 @@ from lib.dataset.JointIntegralDataset import JointsIntegralDataset
 
 logger = logging.getLogger(__name__)
 
-class MPIIDataset(JointsIntegralDataset):
+class WormIDDataset(JointsIntegralDataset):
     def __init__(self, cfg, root, image_set, is_train):
         super().__init__(cfg, root, image_set, is_train)
 
 
         self.num_joints = 16
-        self.flip_pairs = [[0, 5], [1, 4], [2, 3], [10, 15], [11, 14], [12, 13]]
-        self.parent_ids = [1, 2, 6, 6, 3, 4, 6, 6, 7, 8, 11, 12, 7, 7, 13, 14]
+        # self.flip_pairs = [[0, 5], [1, 4], [2, 3], [10, 15], [11, 14], [12, 13]]
+        self.flip_pairs = []
+        # self.parent_ids = [1, 2, 6, 6, 3, 4, 6, 6, 7, 8, 11, 12, 7, 7, 13, 14]
+        self.parent_ids = []
 
         self.db = self._get_db()
         self.db_length = len(self.db)
@@ -65,9 +67,8 @@ class MPIIDataset(JointsIntegralDataset):
                 jts[:, 0:2] = jts[:, 0:2] - 1
                 jts_vis = np.array(a['joints_vis'])
                 assert len(jts) == self.num_joints, 'joint num diff: {} vs {}'.format(len(jts), self.num_joints)
-                jts_3d[:, 0:2] = jts[:, 0:2]
-                jts_3d_vis[:, 0] = jts_vis[:]
-                jts_3d_vis[:, 1] = jts_vis[:]
+                jts_3d[:, 0:3] = jts[:, 0:3]
+                jts_3d_vis[:, 0:3] = jts_vis[:, 0:3]
 
             if np.sum(jts_3d_vis[:, 0]) < 2:  # only one joint visible, skip
                 continue
@@ -109,7 +110,7 @@ class MPIIDataset(JointsIntegralDataset):
 
     def evaluate(self, preds, save_path=None, debug=False):
         # convert 0-based index to 1-based index
-        preds = preds[:, :, 0:2] + 1.0
+        preds = preds[:, :, 0:3] + 1.0
 
         if save_path:
             pred_file = os.path.join(save_path, 'pred.mat')
