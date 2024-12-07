@@ -248,8 +248,15 @@ def get_single_patch_sample(img_path, center_x, center_y, width, height,
                             patch_width, patch_height, rect_3d_width, rect_3d_height, mean, std,
                             do_augment, label_func, depth_in_image=False, occluder=None, DEBUG=False):
     # 1. load image
-    cvimg = cv2.imread(
-        img_path, cv2.IMREAD_COLOR | cv2.IMREAD_IGNORE_ORIENTATION)
+    if img_path.endswith('.npy'):
+        cvimg = np.load(img_path) 
+        # # the np array is in the shape of (h,w,z,c)
+        # # need to convert it into several hwc
+        # cvimg = np.transpose(cvimg, (2, 0, 1)) #  (h,w,z,c) - > 
+
+    else:
+        cvimg = cv2.imread(
+            img_path, cv2.IMREAD_COLOR | cv2.IMREAD_IGNORE_ORIENTATION)
 
     if not isinstance(cvimg, np.ndarray):
         raise IOError("Fail to read %s" % img_path)
