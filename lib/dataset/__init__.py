@@ -10,3 +10,4 @@ from __future__ import print_function
 
 from lib.dataset.h36m import H36M_Integral as h36m
 from lib.dataset.mpii_integral import MPIIDataset as mpii_integral
+from lib.dataset.wormid_dataset import WormIDDataset as wormid
