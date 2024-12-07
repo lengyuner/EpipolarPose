@@ -4,3 +4,4 @@
 models/h36m/fully_supervised_resnet34.pth.tar
 models/h36m/fully_supervised.pth.tar
 /.idea
+/data/wormid/images
