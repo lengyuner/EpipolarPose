@@ -10,7 +10,6 @@ import torch.backends.cudnn as cudnn
 import torch.optim
 import torch.utils.data
 import torch.utils.data.distributed
-import torch.nn.functional as F
 
 from lib.core.config import config
 from lib.core.config import update_config
@@ -156,40 +155,25 @@ def main():
         pin_memory=True
     )
 
-    target_height = 256
-    target_width = 480
-
-    def resize_input(x):
-        B, T, H, W, C = x.shape
-        x = x.permute(0, 1, 4, 2, 3)  # (B, T, H, W, C) -> (B, T, C, H, W)
-        x = x.contiguous().view(-1, C, H, W)  # Reshape to (B*T, C, H, W)
-        x = F.interpolate(
-            x, 
-            size=(target_height, target_width), 
-            mode='bilinear', 
-            align_corners=True
-        )
-        x = x.view(B, T, C, target_height, target_width)
-        x = x.permute(0, 1, 3, 4, 2)  # Back to (B, T, H, W, C)
-        return x.contiguous()
-
     best_model = False
     for epoch in range(config.TRAIN.BEGIN_EPOCH, config.TRAIN.END_EPOCH):
         print(epoch)
         lr_scheduler.step()
 
         # train for one epoch
-        for i, (input, target, meta) in enumerate(train_loader):
-            # Resize input before training
-            input = resize_input(input)
-            train(config, train_loader, model, criterion, optimizer, epoch)
+        train(config, train_loader, model, criterion, optimizer, epoch)
 
         # evaluate on validation set
-        for i, (input, target, meta) in enumerate(valid_loader):
-            # Resize input before validation
-            input = resize_input(input)
-            preds_in_patch_with_score = validate(valid_loader, model)
+        preds_in_patch_with_score = validate(valid_loader, model)
+        # acc = evaluate(epoch, preds_in_patch_with_score, valid_loader, final_output_dir, debug=config.DEBUG.DEBUG)
 
+        # perf_indicator = 500. - acc if config.DATASET.DATASET == 'h36m' or 'mpii_3dhp' or 'jta' else acc
+
+        # if perf_indicator > best_perf:
+        #     best_perf = perf_indicator
+        #     best_model = True
+        # else:
+        #     best_model = False
         perf_indicator = 0.0 
         logger.info('=> saving checkpoint to {}'.format(final_output_dir))
         save_checkpoint({

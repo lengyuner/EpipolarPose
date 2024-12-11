@@ -70,7 +70,8 @@ class JointsIntegralDataset(Dataset):
 
         self.label_func = get_label_func()
 
-        self.occluders = load_occluders(cfg.DATASET.VOC) if cfg.DATASET.OCCLUSION and is_train else None
+        # self.occluders = load_occluders(cfg.DATASET.VOC) if cfg.DATASET.OCCLUSION and is_train else None
+        self.occluders = None
 
         self.cam_config = []
         self.parent_ids = None

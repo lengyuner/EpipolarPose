@@ -249,6 +249,7 @@ def get_single_patch_sample(img_path, center_x, center_y, width, height,
                             do_augment, label_func, depth_in_image=False, occluder=None, DEBUG=False):
     # 1. load image
     if img_path.endswith('.npy'):
+        # print(img_path)
         cvimg = np.load(img_path) 
         # # the np array is in the shape of (h,w,z,c)
         # # need to convert it into several hwc

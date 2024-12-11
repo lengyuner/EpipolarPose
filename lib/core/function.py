@@ -66,8 +66,6 @@ def train_integral(config, train_loader, model, criterion, optimizer, epoch):
 def validate_integral(val_loader, model):
     print("Validation stage")
     result_func = get_result_func()
-
-    # switch to evaluate mode
     model.eval()
 
     preds_in_patch_with_score = []
@@ -83,29 +81,17 @@ def validate_integral(val_loader, model):
             preds = model(batch_data)
             del batch_data, batch_label, batch_label_weight
 
-
-            preds_in_patch_with_score.append(result_func(256, 256, preds))
+            result_temp = result_func(256, 256, preds)
+            # Convert to numpy array immediately and concatenate along axis 0
+            result_temp = np.array(result_temp)
+            preds_in_patch_with_score.append(result_temp)
             del preds
 
-        _p = np.asarray(preds_in_patch_with_score)
-
-        # Dirty solution for partial batches
-        if len(_p.shape) < 2:
-            tp = np.zeros(((_p.shape[0] - 1) * _p[0].shape[0] + _p[-1].shape[0], _p[0].shape[1], _p[0].shape[2]))
-
-            start = 0
-            end = _p[0].shape[0]
-
-            for t in _p:
-                tp[start:end] = t
-                start = end
-                end += t.shape[0]
-
-            _p = tp
-        else:
-            _p = _p.reshape((_p.shape[0] * _p.shape[1], _p.shape[2], _p.shape[3]))
-
-        preds_in_patch_with_score = _p[0: len(val_loader.dataset)]
+        # Concatenate all predictions along axis 0
+        preds_in_patch_with_score = np.concatenate(preds_in_patch_with_score, axis=0)
+        
+        # Trim to exact dataset size
+        preds_in_patch_with_score = preds_in_patch_with_score[:len(val_loader.dataset)]
 
         return preds_in_patch_with_score
 

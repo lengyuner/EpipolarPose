@@ -94,19 +94,19 @@ class PoseResNet(nn.Module):
         self.inplanes = 64
         extra = cfg.MODEL.EXTRA
         self.deconv_with_bias = extra.DECONV_WITH_BIAS
+        self.volume = cfg.MODEL.VOLUME
         super(PoseResNet, self).__init__()
-        
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
                                bias=False)
         self.bn1 = nn.BatchNorm2d(64, momentum=BN_MOMENTUM)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        
         self.layer1 = self._make_layer(block, 64, layers[0])
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
 
+        # used for deconv layers
         self.deconv_layers = self._make_deconv_layer(
             extra.NUM_DECONV_LAYERS,
             extra.NUM_DECONV_FILTERS,
@@ -115,13 +115,15 @@ class PoseResNet(nn.Module):
 
         self.final_layer = nn.Conv2d(
             in_channels=extra.NUM_DECONV_FILTERS[-1],
-            out_channels=1,
+            out_channels=cfg.MODEL.NUM_JOINTS * cfg.MODEL.DEPTH_RES if self.volume else cfg.MODEL.NUM_JOINTS,
             kernel_size=extra.FINAL_CONV_KERNEL,
             stride=1,
             padding=1 if extra.FINAL_CONV_KERNEL == 3 else 0
         )
 
-        self.final_upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+        if not self.volume:
+            self.avgpool = nn.AvgPool2d(kernel_size=int(cfg.MODEL.IMAGE_SIZE[0] / 2**5), stride=1)
+            self.depth_fc = nn.Linear(2048, cfg.MODEL.NUM_JOINTS * cfg.MODEL.DEPTH_RES)
 
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
@@ -181,31 +183,33 @@ class PoseResNet(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, x):
-        # x shape: (batch, seq_len, H, W, C)
-        B, T, H, W, C = x.shape
-        x = x.view(B * T, C, H, W)
-
-        # Encoder path
-        x = self.conv1(x)      # H/2, W/2
+        x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
-        x = self.maxpool(x)    # H/4, W/4
+        x = self.maxpool(x)
 
         x = self.layer1(x)
-        x = self.layer2(x)     # H/8, W/8
-        x = self.layer3(x)     # H/16, W/16
-        x = self.layer4(x)     # H/32, W/32
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
 
-        # Decoder path
-        x = self.deconv_layers(x)  # Upsamples back to H/4, W/4
-        x = self.final_layer(x)
-        x = self.final_upsample(x) # Final upsampling to H/2, W/2
-        x = self.final_upsample(x) # Final upsampling to H, W
 
-        # Reshape back to sequence format - fix the view operation
-        x = x.view(B, T, x.size(2), x.size(3))
-        
-        return x
+        if self.volume:
+            x = self.deconv_layers(x)
+            x = self.final_layer(x)
+
+            return x
+        else:
+            y = x
+
+            x = self.deconv_layers(x)
+            x = self.final_layer(x)
+
+            y = self.avgpool(y)
+            y = y.view(y.size(0), -1)
+            y = self.depth_fc(y)
+
+            return x, y
 
     def init_weights(self, pretrained=''):
         if os.path.isfile(pretrained):
@@ -293,9 +297,6 @@ def get_pose_net(cfg, is_train, **kwargs):
 
     block_class, layers = resnet_spec[num_layers]
 
-    # cfg.MODEL.IMAGE_SIZE = [229, 461]
-    cfg.MODEL.IMAGE_SIZE = [256, 480]
-    
     model = PoseResNet(block_class, layers, cfg, **kwargs)
 
     if is_train and cfg.MODEL.INIT_WEIGHTS:

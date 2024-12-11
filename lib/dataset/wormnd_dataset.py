@@ -11,25 +11,27 @@ from lib.dataset.JointIntegralDataset import JointsIntegralDataset
 
 logger = logging.getLogger(__name__)
 
-class WormIDDataset(JointsIntegralDataset):
+class WormNDDataset(JointsIntegralDataset):
     def __init__(self, cfg, root, image_set, is_train):
         super().__init__(cfg, root, image_set, is_train)
 
 
-        self.num_joints = 16
+        self.num_joints = 200
         # self.flip_pairs = [[0, 5], [1, 4], [2, 3], [10, 15], [11, 14], [12, 13]]
         self.flip_pairs = []
         # self.parent_ids = [1, 2, 6, 6, 3, 4, 6, 6, 7, 8, 11, 12, 7, 7, 13, 14]
         self.parent_ids = []
 
         self.db = self._get_db()
+        # print(self.db)
+        print(self.db[0]['image'])
         self.db_length = len(self.db)
 
         logger.info('=> load {} samples'.format(len(self.db)))
 
     def __getitem__(self, idx):
         the_db = copy.deepcopy(self.db[idx])
-
+        # print(the_db['image'])
         img_patch, label, label_weight, _, _ = get_single_patch_sample(the_db['image'], the_db['center_x'],
                                                                        the_db['center_y'], the_db['width'],
                                                                        the_db['height'], the_db['joints_3d'].copy(),
@@ -52,6 +54,7 @@ class WormIDDataset(JointsIntegralDataset):
         file_name = os.path.join(self.root,
                                  'annot',
                                  self.image_set+'.json')
+        print(file_name)
         with open(file_name) as anno_file:
             anno = json.load(anno_file)
 
@@ -59,18 +62,26 @@ class WormIDDataset(JointsIntegralDataset):
 
         gt_db = []
         for a in anno:
+            if '20230928-16-0-0_layer' in a['image']:
+                continue
+            print(a['image'])
             # joints and vis
-            jts_3d = np.zeros((self.num_joints, 3), dtype=np.float)
-            jts_3d_vis = np.zeros((self.num_joints, 3), dtype=np.float)
+            # jts_3d = np.zeros((self.num_joints, 3), dtype=np.float)
+            # jts_3d_vis = np.zeros((self.num_joints, 3), dtype=np.float)
+            jts_3d = np.zeros((self.num_joints, 3), dtype=float)
+            jts_3d_vis = np.zeros((self.num_joints, 3), dtype=float)
             if self.image_set != 'test':
+                # print('image_set != test')
                 jts = np.array(a['joints'])
                 jts[:, 0:2] = jts[:, 0:2] - 1
-                jts_vis = np.array(a['joints_vis'])
+                # Reshape jts_vis to match the expected dimensions
+                jts_vis = np.array(a['joints_vis'])[:, np.newaxis].repeat(3, axis=1)
                 assert len(jts) == self.num_joints, 'joint num diff: {} vs {}'.format(len(jts), self.num_joints)
                 jts_3d[:, 0:3] = jts[:, 0:3]
-                jts_3d_vis[:, 0:3] = jts_vis[:, 0:3]
+                jts_3d_vis[:, 0:3] = jts_vis
 
             if np.sum(jts_3d_vis[:, 0]) < 2:  # only one joint visible, skip
+                print('np.sum(jts_3d_vis[:, 0]) < 2')
                 continue
 
             u, d, l, r = calc_kpt_bound(jts_3d, jts_3d_vis)
@@ -93,7 +104,9 @@ class WormIDDataset(JointsIntegralDataset):
             width = w * 1.25
             height = h * 1.25
 
-            img_path = os.path.join(self.root, 'images', a['image'])
+            # img_path = os.path.join(self.root, 'images', a['image'])
+            img_path =  a['image']
+            print('aaaaaaaaaaappend')
             gt_db.append({
                 'image': img_path,
                 'center_x': c_x,
@@ -105,6 +118,7 @@ class WormIDDataset(JointsIntegralDataset):
                 'joints_3d': jts_3d,
                 'joints_3d_vis': jts_3d_vis,
             })
+        # print(gt_db)x/
 
         return gt_db
 
