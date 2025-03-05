@@ -210,9 +210,53 @@ def main():
         final_model_state_file))
     torch.save(model.module.state_dict(), final_model_state_file)
 
+def test_model():
+
+    best_perf = 0.0
+
+    args = parse_args()
+    reset_config(config, args)
+
+    logger, final_output_dir = create_logger(
+        config, args.cfg, 'train')
+
+    logger.info(pprint.pformat(args))
+    logger.info(pprint.pformat(config))
+
+    # cudnn related setting
+    cudnn.benchmark = config.CUDNN.BENCHMARK
+    torch.backends.cudnn.deterministic = config.CUDNN.DETERMINISTIC
+    torch.backends.cudnn.enabled = config.CUDNN.ENABLED
+
+    model = models.pose3d_resnet.get_pose_net(config, is_train=True)
+    # # model = models.Vnet.VNet()
+    # # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # # print(device)
+    # # model = model.to(device)
+    #
+    # # copy model file
+    #
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # model = VNet().to(device)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.to(device)
+
+
+    input = torch.randn(1, 1, 16, 256, 480)  # BCDHW
+    input = torch.randn(1, 1, 16, 128, 128)  # BCDHW
+    input = torch.randn(1, 2, 16, 128, 128)  # BCDHW
+    input = input.to(device)
+    out = model(input)
+    print("output.shape:", out.shape)  # 4, 1, 8, 256, 256
+
+
+
+
 if __name__ == '__main__':
-    main()
+    test_model()
 # conda activate meta
 # python scripts/train.py --cfg experiments/wormnd/train-ss.yaml
 
 # C:/Users/jd/.conda/envs/meta/python.exe scripts/train.py --cfg experiments/wormnd/train-ss.yaml
+# C:/Users/jd/.conda/envs/meta/python.exe scripts/test_model_input_and_output.py --cfg experiments/wormnd/train-ss.yaml

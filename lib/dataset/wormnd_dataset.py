@@ -62,8 +62,8 @@ class WormNDDataset(JointsIntegralDataset):
 
         gt_db = []
         for a in anno:
-            if '20230928-16-0-0_layer' in a['image']:
-                continue
+            # if '20230928-16-0-0_layer' in a['image']:
+            #     continue
             print(a['image'])
             # joints and vis
             # jts_3d = np.zeros((self.num_joints, 3), dtype=np.float)

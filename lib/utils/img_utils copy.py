@@ -1,6 +1,5 @@
 import cv2
 import torch
-import torch.nn.functional as F
 
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import axes3d, Axes3D  # <-- Note the capitalization!
@@ -114,10 +113,13 @@ def trans_point2d(pt_2d, trans):
 
 def generate_patch_image_cv(cvimg, c_x, c_y, bb_width, bb_height, patch_width, patch_height, do_flip, scale, rot):
     img = cvimg.copy()
+    # c = center.copy()
+    # img_height, img_width, img_channels = img.shape 
+    img_depth, img_height, img_width, img_channels = img.shape
 
     if do_flip:
         img = img[:, ::-1, :]
-        c_x = img.shape[1] - c_x - 1
+        c_x = img_width - c_x - 1
 
     trans = gen_trans_from_patch_cv(c_x, c_y, bb_width, bb_height, patch_width, patch_height, scale, rot, inv=False)
 
@@ -126,10 +128,13 @@ def generate_patch_image_cv(cvimg, c_x, c_y, bb_width, bb_height, patch_width, p
     return img_patch, trans
 
 
-def convert_cvimg_to_tensor(cvimg):
-    # from h,w,c to c,h,w
+def convert_cvimg_to_tensor(cvimg, occlusion_aug=True):
+    # from h,w,c(OpenCV) to c,h,w
     tensor = cvimg.copy()
     tensor = np.transpose(tensor, (2, 0, 1))
+    # from BGR(OpenCV) to RGB
+    # tensor = tensor[::-1, :, :]
+    # from int to float
     tensor = tensor.astype(np.float32)
     return tensor
 
@@ -245,77 +250,46 @@ def get_single_patch_sample(img_path, center_x, center_y, width, height,
                             do_augment, label_func, depth_in_image=False, occluder=None, DEBUG=False):
     # 1. load image
     if img_path.endswith('.npy'):
-        # Load npy file with shape (Z, H, W, C)
-        # img_path =r"D:\GitHub\WormID\EpipolarPose\data\wormnd\images\20230928-14-27-0.npy"
-        cvimg = np.load(img_path)
-        print('cvimg = np.load(img_path)')
+        # print(img_path)
+        cvimg = np.load(img_path) 
         print(cvimg.shape)
-        
-        Z, H, W, C = cvimg.shape
-        print('Z, H, W, C = cvimg.shape')
-        print(cvimg.shape)
-        
-        target_height = H // 2
-        target_width = W // 2
-        cvimg = torch.from_numpy(cvimg)
-        cvimg = resize_input(cvimg)  # This will handle GPU/CPU transfers
-        cvimg = cvimg.numpy()  # Safe to convert to numpy now
+        # # the np array is in the shape of (h,w,z,c)
+        # # need to convert it into several hwc
+        # cvimg = np.transpose(cvimg, (2, 0, 1)) #  (h,w,z,c) - > 
+
     else:
         cvimg = cv2.imread(
             img_path, cv2.IMREAD_COLOR | cv2.IMREAD_IGNORE_ORIENTATION)
-        # Add dummy Z dimension for consistency
-        cvimg = np.expand_dims(cvimg, axis=0)
 
     if not isinstance(cvimg, np.ndarray):
         raise IOError("Fail to read %s" % img_path)
 
-    # Get dimensions
-    if len(cvimg.shape) == 4:   # (Z, C, H, W)
-        img_depth, img_channels, img_height, img_width = cvimg.shape
-    else:  # (H, W, C)
-        img_height, img_width, img_channels = cvimg.shape
-        img_depth = 1
-        cvimg = np.expand_dims(cvimg, axis=0)
+    img_height, img_width, img_channels = cvimg.shape
+    img_depth, img_height, img_width, img_channels = cvimg.shape
 
-    do_augment = False
     # 2. get augmentation params
     if do_augment:
         scale, rot, do_flip, color_scale = do_augmentation()
     else:
         scale, rot, do_flip, color_scale = 1.0, 0, False, [1.0, 1.0, 1.0]
 
-    # 3. generate image patch for each depth slice
-    img_patches = []
-    for d in range(img_depth):
-        img_slice = cvimg[d]
-        img_patch_cv, trans = generate_patch_image_cv(
-            img_slice, center_x, center_y, width, height, 
-            patch_width, patch_height, do_flip, scale, rot
-        )
-        image = img_patch_cv.copy()
+    # 3. generate image patch
+    img_patch_cv, trans = generate_patch_image_cv(cvimg, center_x, center_y, width, height, patch_width, patch_height,
+                                                  do_flip, scale, rot)
+    image = img_patch_cv.copy()
+    image = image[:, :, ::-1]
 
-        if occluder:
-            image = occlude_with_objects(image, occluder)
+    if occluder:
+        image = occlude_with_objects(image, occluder)
 
-        img_patch_cv = image.copy()
-        img_patch = convert_cvimg_to_tensor(image)
+    img_patch_cv = image.copy()
+    img_patch = convert_cvimg_to_tensor(image)
 
-        # apply normalization
-        num_channels = img_patch.shape[0]  # Get actual number of channels
-        for n_c in range(num_channels):
-            # For RGB channels, use color_scale. For additional channels, use 1.0
-            scale_factor = color_scale[n_c] if n_c < 3 else 1.0
-            img_patch[n_c, :, :] = np.clip(img_patch[n_c, :, :] * scale_factor, 0, 255)
-            if mean is not None and std is not None:
-                # Use the last mean/std values for additional channels
-                mean_val = mean[min(n_c, len(mean)-1)]
-                std_val = std[min(n_c, len(std)-1)]
-                img_patch[n_c, :, :] = (img_patch[n_c, :, :] - mean_val) / std_val
-
-        img_patches.append(img_patch)
-
-    # Stack all patches along a new dimension
-    img_patches = np.stack(img_patches, axis=0)  # (Z, C, H, W)
+    # apply normalization
+    for n_c in range(img_channels):
+        img_patch[n_c, :, :] = np.clip(img_patch[n_c, :, :] * color_scale[n_c], 0, 255)
+        if mean is not None and std is not None:
+            img_patch[n_c, :, :] = (img_patch[n_c, :, :] - mean[n_c]) / std[n_c]
 
     # 4. generate patch joint ground truth
     # flip joints and apply Affine Transform on joints
@@ -331,8 +305,8 @@ def get_single_patch_sample(img_path, center_x, center_y, width, height,
 
     # 5. get label of some type according to certain need
     label, label_weight = label_func(patch_width, patch_height, joints, joints_vis)
-    print(img_patches.shape)
-    return img_patches, label, label_weight, scale, rot
+
+    return img_patch, label, label_weight, scale, rot
 
 
 def multi_meshgrid(*args):
@@ -366,82 +340,3 @@ def flip(tensor, dims):
     assert flipped.device == tensor.device
     assert flipped.requires_grad == tensor.requires_grad
     return flipped
-
-
-def resize_input(x, chunk_size=32):
-    """
-    Resize input tensor to half of its original height and width.
-    Args:
-        x: Input tensor with shape (Z, H, W, C) or (B, T, C, H, W)
-        chunk_size: Size of chunks to process to manage memory
-    Returns:
-        Resized tensor
-    """
-    # Convert to float32 first
-    x = x.float()
-
-    if len(x.shape) == 4:  # (Z, H, W, C)
-        Z, H, W, C = x.shape
-        print(f"Input shape: {x.shape}")
-
-        # Reshape for interpolation
-        x = x.permute(0, 3, 1, 2)  # (Z, C, H, W)
-
-        # Calculate target size
-        target_height = H // 2
-        target_width = W // 2
-        print(f"Resizing from {H}x{W} to {target_height}x{target_width}")
-
-        # Move to GPU for processing
-        x = x.cuda()
-
-        # Resize
-        x = F.interpolate(
-            x,
-            size=(target_height, target_width),
-            mode='bilinear',
-            align_corners=True
-        )
-
-        # Move back to CPU and reshape
-        x = x.cpu()
-        x = x.permute(0, 2, 3, 1)  # (Z, H, W, C)
-
-        # Convert back to uint8
-        x = x.round().byte()
-
-    elif len(x.shape) == 5:  # (B, T, C, H, W)
-        B, T, C, H, W = x.shape
-        print(f"Input shape: {x.shape}")
-
-        # Calculate target size
-        target_height = H // 2
-        target_width = W // 2
-        print(f"Resizing from {H}x{W} to {target_height}x{target_width}")
-
-        # Process in chunks
-        resized_chunks = []
-        for i in range(0, T, chunk_size):
-            end_idx = min(i + chunk_size, T)
-            chunk = x[:, i:end_idx, :, :, :]
-            chunk = chunk.contiguous().view(-1, C, H, W)
-
-            chunk = F.interpolate(
-                chunk,
-                size=(target_height, target_width),
-                mode='bilinear',
-                align_corners=True
-            )
-
-            chunk = chunk.view(B, end_idx - i, C, target_height, target_width)
-            resized_chunks.append(chunk)
-
-            torch.cuda.empty_cache()
-
-        x = torch.cat(resized_chunks, dim=1)
-
-    else:
-        raise ValueError(f"Unexpected input shape: {x.shape}")
-
-    print(f"Output shape: {x.shape}")
-    return x.contiguous()

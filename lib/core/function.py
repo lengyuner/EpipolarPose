@@ -27,14 +27,22 @@ def train_integral(config, train_loader, model, criterion, optimizer, epoch):
         batch_data, batch_label, batch_label_weight, meta = data
 
         optimizer.zero_grad()
+        # # add a dimension to batch_data
+        # batch_data = batch_data.unsqueeze(0)
+        # print('batch_data = batch_data.unsqueeze(0)')
+        # print(batch_data.shape)
 
         batch_data = batch_data.cuda()
         batch_label = batch_label.cuda()
         batch_label_weight = batch_label_weight.cuda()
 
         batch_size = batch_data.size(0)
+
         # compute output
         preds = model(batch_data)
+        # print('preds = model(batch_data)')
+        # print(preds.shape)
+
 
         loss = criterion(preds, batch_label, batch_label_weight)
         del batch_data, batch_label, batch_label_weight, preds
